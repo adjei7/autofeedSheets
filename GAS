@@ -217,8 +217,8 @@ function writeFormulas(noOfQuestions, allData, username) {
 function nameForFile(username){
   
   Logger.log(username);
-  if (username=="a.duale@kaa.org.uk") {
-    username = "d.abdishakur@kaa.org.uk";
+  if (username=="") {
+    username = "";
   }
   
   var nameContact = ContactsApp.getContactsByEmailAddress(username)[0];
