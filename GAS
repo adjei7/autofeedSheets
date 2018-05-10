@@ -1,0 +1,375 @@
+//general code. Needs to be adapted.
+//update 11/11/2016 username from email address in setTrigger
+
+var columnLetter = "AM1";
+var passPercentage = 0.7;
+
+function onInstall(e) {
+  setTrigger(e);
+  Logger.log('installing');
+  //myFunction(e);
+}
+
+function onOpen(e) {
+   /*var triggers = ScriptApp.getProjectTriggers();
+  if (triggers.length>0) {
+    SpreadsheetApp.getUi().createAddonMenu().addItem('Trigger Exists', 'setTrigger').addToUi();
+  } else { */
+    SpreadsheetApp.getUi().createAddonMenu().addItem('Set Trigger', 'setTrigger').addToUi();
+  //}
+  Logger.log('running');
+}
+
+function setTrigger(e) {
+  var spreadsheet = SpreadsheetApp.getActive();
+  var triggers = ScriptApp.getProjectTriggers();
+  Logger.log(triggers);
+  if (triggers.length>0) {
+  Logger.log('trigger already exists');
+  } else {
+    Logger.log('new trigger');
+  ScriptApp.newTrigger('myFunction').forSpreadsheet(spreadsheet).onFormSubmit().create();
+  }
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var usernameCell = sheet.getRange(1, 2);
+  //var usernameCell = spreadsheet.getRange(1, 4+noOfQuestions+j);
+  usernameCell.setValue("Username");
+}
+
+function myFunction(e) {
+  Logger.log("running on trigger");
+  var namedValues = e.namedValues;
+  getDocument(namedValues);
+  Logger.log("running on trigger");
+}
+
+function getDocument(namedValues) {
+  var length = Object.keys(namedValues).length;
+  //Logger.log(namedValues);
+  var keyNames = Object.keys(namedValues);
+  //start of spreadsheet answers section
+  var spreadsheet = SpreadsheetApp.getActiveSheet();
+  var allData = spreadsheet.getDataRange().getValues();
+  var noOfQuestions = Object.keys(namedValues).length-3;
+  var username = namedValues.Username;
+  writeFormulas(noOfQuestions, allData, username);
+  allData = spreadsheet.getDataRange().getValues(); //refresh allData if does not work, then will have to specifically find the students last entry and get results from that.
+  var data = spreadsheet.getRange(2, 1, 1, length).getValues(); //correct answer to compare to
+  var spreadsheetName = SpreadsheetApp.getActiveSpreadsheet().getName();
+  var spreadsheetNamenr = spreadsheetName.replace("(Responses)","");
+ 
+  var namefile = nameForFile(username);
+  var docName = spreadsheetNamenr + "Answers-" + namefile;
+  Logger.log(docName);
+  var files = DriveApp.getFilesByName(docName);
+  while (files.hasNext()) {
+      var file = files.next();
+    }
+  var fileId = file.getId();
+  Logger.log(fileId);
+  var document = DocumentApp.openById(fileId);
+  Logger.log(document.getName());
+  var body = document.getBody();
+  var text = document.getBody().editAsText();
+
+  
+  //refresh does not seem to work possibly because it is not the time limit that is the issue.
+ 
+ 
+  
+  var attempt = 0;
+  var attemptLocation = [];
+  for(var i = 0; i < allData.length; i++){
+    if(allData[i][1] == username){
+      attempt++;
+      attemptLocation.push(i);
+    }
+  }
+  Logger.log(attemptLocation);
+  var lastLocation = attemptLocation[attemptLocation.length-1];
+  Logger.log(lastLocation);
+  
+  text.appendText("\n");
+  //text.appendText("\nTime of Submission: " + allData[allData.length-1][0]);
+  text.appendText("\nTime of Submission: " + allData[lastLocation][0]);
+  text.appendText("\nTry number " + attempt);
+  
+  var correctStyle = {};
+  correctStyle[DocumentApp.Attribute.BACKGROUND_COLOR] = '#2EFE2E';
+  
+  var incorrectStyle = {};
+  incorrectStyle[DocumentApp.Attribute.BACKGROUND_COLOR] = '#FF0000';
+  
+  var resultStyle = {};
+  resultStyle[DocumentApp.Attribute.FONT_SIZE] = 11;
+  resultStyle[DocumentApp.Attribute.UNDERLINE]= false;
+  
+  var table = body.appendTable([['Question','Your Answer','Mark']]);
+  for (var i = 0; i < noOfQuestions; i++) {
+    var tr = table.appendTableRow();
+    //var tc1 = tr.appendTableCell('\n');
+    var tc2 = tr.appendTableCell(allData[0][3+i] + '\n');
+    //var tc3 = tr.appendTableCell(allData[allData.length-1][3+i] + '\n');
+    var tc3 = tr.appendTableCell(allData[lastLocation][3+i] + '\n');
+    //var mark = allData[allData.length-1][noOfQuestions+3+i];
+    var mark = allData[lastLocation][noOfQuestions+3+i];
+    
+    //var mark =""; //test please remove later
+    var fullMark = allData[1][noOfQuestions+3+i];
+
+    if (mark/fullMark == 1) {
+      var tc4 = tr.appendTableCell("Correct answer\n");
+      tc4.setAttributes(correctStyle);
+  } else if (mark == "F") {
+      var tc4 = tr.appendTableCell("You have selected too many options. Please try again.\n");
+      tc4.setAttributes(incorrectStyle);
+  } else {
+    try { //catch error with writing mark.tofixed of nothing.
+      //mark.toFixed(0);
+      var tc4 = tr.appendTableCell(mark.toFixed(0) + " out of " + fullMark + " Correct. Try again. \n");
+      tc4.setAttributes(incorrectStyle);
+    }
+    catch(err) {
+      var tc4 = tr.appendTableCell("Your answer could not be recorded. Please call Mr Owusu then try again.\n" + err.message  +" Mark:" + mark);
+    }
+    }
+  }
+  //var total = allData[allData.length-1][allData[0].length-1];
+  var total = allData[lastLocation][allData[0].length-1];
+  var outOf = allData[1][allData[0].length-1];
+  var percentage = total/outOf*100;
+  var result1 = text.appendText("You got: " + total + " out of a possible " + outOf + " marks.\n");
+  result1.setAttributes(resultStyle); //need to fix for full document formatting
+  var result2 = text.appendText("That is: " + percentage.toFixed(2) + "%");
+  result2.setAttributes(resultStyle); //need to fix for full document formatting
+  if (percentage == 100) {
+    body.setAttributes(correctStyle);
+    text.appendText(" \nWell Done! :)")
+  }
+  text.appendText("\n");
+  body.appendHorizontalRule();
+  document.saveAndClose();
+}
+
+function testtostring() {
+  var num = 3;
+  var str=num.toString();
+  Logger.log(str);
+
+}
+
+
+function writeFormulas(noOfQuestions, allData, username) {
+  var spreadsheet = SpreadsheetApp.getActiveSheet();
+  
+  if (allData.length == 2) {
+    for (var j = 0; j < noOfQuestions; j++) {
+      //set Question Mark Title
+      var questionTitle = allData[0][3+j];
+      //Logger.log(questionTitle);
+      var questionTitleMarkCell = spreadsheet.getRange(1, 4+noOfQuestions+j);
+      questionTitleMarkCell.setValue(questionTitle + " - Mark");
+      
+      //Set formula for mark
+      var answer = allData[1][3+j];
+      var answer = answer.toString(); //numbers don't work
+      var answerArray = answer.split(", ");
+      var answerCell = spreadsheet.getRange(2, 4+j).getA1Notation();
+      var formula = '=if((len(' + answerCell + ')-len(substitute(' + answerCell + ', ",", "")))>' + (answerArray.length-1) + ', "F", sum(';
+      Logger.log(formula);
+      for (var k = 0; k < answerArray.length; k++) {
+        formula = formula + 'if(isnumber(search("' + answerArray[k] + '",' + answerCell + ')),1,0)';
+        if (k != answerArray.length-1) {
+          formula = formula + ', ';
+          Logger.log(formula);
+        }
+      }
+      
+      formula = formula + '))';
+      Logger.log(formula);
+      var questionAnswerMarkCell = spreadsheet.getRange(2, 4+noOfQuestions+j);
+      questionAnswerMarkCell.setFormula(formula);
+    }
+    
+    var totalCellTitle = spreadsheet.getRange(1, 4+noOfQuestions+noOfQuestions);
+    totalCellTitle.setValue("Total");
+    var startSumCell = spreadsheet.getRange(2, 4+noOfQuestions).getA1Notation();
+    var endSumCell = spreadsheet.getRange(2, 3+noOfQuestions+noOfQuestions).getA1Notation();
+    var totalCell = spreadsheet.getRange(2, 4+noOfQuestions+noOfQuestions);
+    totalCell.setFormula('=sum(' + startSumCell + ':' + endSumCell + ')');
+    
+    
+    //=if((len(E2)-len(substitute(E2, ",", "")))>1, "F", sum(if(isnumber(search("Hard Disk",E2)),1,0), if(isnumber(search("RAM",E2)),1,0)))
+  } else {
+    spreadsheet.sort(1); //new addition to stop from going wrong when students get correct answer but says its wrong. Infinity error. Sort by time.
+    var lastLocation = nameLocation(allData, username); //resolve duplication in writing
+    for (var i = 0; i < noOfQuestions+1; i++) {
+      var oldCell = spreadsheet.getRange(2, noOfQuestions+4+i);
+      var oldFormula = oldCell.getFormulaR1C1();
+      //var newCell = spreadsheet.getRange(allData.length, noOfQuestions+4+i);
+      var newCell = spreadsheet.getRange(lastLocation+1, noOfQuestions+4+i);
+      newCell.setFormulaR1C1(oldFormula);
+    }
+  }
+  
+}
+
+function nameForFile(username){
+  
+  Logger.log(username);
+  if (username=="a.duale@kaa.org.uk") {
+    username = "d.abdishakur@kaa.org.uk";
+  }
+  
+  var nameContact = ContactsApp.getContactsByEmailAddress(username)[0];
+  var name = nameContact.getFullName();
+  if (name == "") {
+    nameContact = ContactsApp.getContactsByEmailAddress(username)[1];
+    name = nameContact.getFullName(); 
+  }
+
+  var stripName = name.replace(/\W+/g, "-"); //added regex
+
+  var nameFile = stripName.toLowerCase();
+  return nameFile;
+}
+
+//nameLocation
+function nameLocation(allData, username) {
+  Logger.log("in last location");
+  var attemptLocation = [];
+  for(var i = 0; i < allData.length; i++){
+    if(allData[i][1] == username){
+      attemptLocation.push(i);
+    }
+  }
+  Logger.log(attemptLocation);
+  var lastLocation = attemptLocation[attemptLocation.length-1];
+  Logger.log(lastLocation);
+  return lastLocation;
+}
+
+function marksheet() {
+  var spreadsheet = SpreadsheetApp.getActiveSheet();
+  //get the total 
+  spreadsheet.sort(1);
+  var allData = spreadsheet.getDataRange().getValues();
+  var outOf = allData[1][allData[0].length-1]; 
+  //Logger.log("Max mark is " + outOf);
+  //end get total
+  
+  spreadsheet.sort(2);
+  var allData = spreadsheet.getDataRange().getValues();
+  //Logger.log(allData);
+  var user=allData[1][1];
+  var mark=allData[1][allData[0].length-1];
+  var i=0;
+  //Logger.log(user);
+  //Logger.log(mark);
+  
+  for(i=2; i<allData.length; i++) { //change for full data
+    var latestUser = allData[i][1];
+    var latestMark = allData[i][allData[0].length-1];
+    //Logger.log(latestUser);
+    //Logger.log(latestMark);
+    //Logger.log(mark)
+    
+    if(i==allData.length-1){ //change depending on what is at the end
+      //Logger.log("At the end");
+      if (latestUser!=user){
+        sendMarks(user, mark, outOf);
+        sendMarks(latestUser, latestMark, outOf);
+       // Logger.log("Send %s to marksheet for %s", latestMark, latestUser);
+      } else {
+        if (latestMark > mark) {
+        mark = latestMark;
+      //  Logger.log("Mark is bigger");
+        }
+      //  Logger.log(user + " Highest Mark is: " + mark);
+        sendMarks(user, mark, outOf);
+      //  Logger.log("Send %s to marksheet for %s", mark, user);
+      }
+      //Logger.log("at the end. Sen");
+    } else if (latestUser!=user) {
+      sendMarks(user, mark, outOf);
+     // Logger.log("user changed or at end. Send %s to marksheet for %s", mark, user);
+      user = latestUser;
+      mark = latestMark;
+     // Logger.log(user);
+     // Logger.log(mark);
+    } else {
+      if (latestMark > mark) {
+        mark = latestMark;
+       // Logger.log("Mark is bigger");
+      }
+      //Logger.log(user + " Highest Mark is: " + mark);
+    }
+  }
+}
+
+function sendMarks(user, mark, max){
+ // mark = 6;
+  //max = 8;
+  var masterSpreadsheet = SpreadsheetApp.openById("1iHATYdq9eL2rrbald8g9aKq3-eZALQft9GPLAjAALJo");
+  var masterSheet = masterSpreadsheet.getSheetByName("Year 8 &9");
+  var data = masterSheet.getDataRange().getValues();
+  var row=1;
+  while (data[row][0]!=user && row<data.length-1){
+    
+   //   Logger.log(row);
+    row++;
+  }
+  
+ // Logger.log(row);
+  //var columnLetter = "BL1"; //change for each sort
+  var column = masterSheet.getRange(columnLetter);
+  var columnNo = column.getColumn();
+  var cell = masterSheet.getRange(row+1, columnNo);
+  var score = mark/max*1/passPercentage;
+  score = score.toFixed(2);
+  cell.setValue(score);
+  
+  //var cellValue = cell.getValue();
+  //Logger.log(cellValue);
+  
+  
+  //for (var i=1; i<data.length; i++){
+    
+  //}
+  
+
+}
+
+
+//nameLocation backwards
+/**
+function nameLocationBack(allData, username) {
+  Logger.log("in last location back");
+  //var attemptLocation = [];
+  var lastLocation
+  var found = false;
+  for(var i = allData.length-1; found=false; i--){
+    if(allData[i][1] == username){
+      attemptLocation.push(i);
+    }
+  }
+  //Logger.log(attemptLocation);
+  //var lastLocation = attemptLocation[attemptLocation.length-1];
+  Logger.log(lastLocation);
+  return lastLocation;
+}
+**/
+
+/*
+Setup instructions:
+NOW INSTALLABLE SO JUST COPY AND PASTE CODE. REFRESH SPREADSHEET GO TO MENU AND ADD CLICK TRIGGER. DONE!
+Create test on a form
+install script - tools, script editor (copy and paste)
+initialise by doing the following:
+-Resources, current project triggers, from spreadsheet, on form  submit
+-Resources, advanced google services, turn on drive api 
+-Go to google developers console and turn on contacts api and drive api
+Fill out correct answers
+check spreadsheet to see if answers have been placed in answer boxes.
+
+*/
